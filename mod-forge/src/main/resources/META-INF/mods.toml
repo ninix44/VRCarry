@@ -3,31 +3,31 @@ loaderVersion = "[46,)"
 license = "MIT"
 
 [[mods]]
-modId = "visor_example"
+modId = "vrcarry"
 version = "${version}"
-displayName = "VisorExample"
-authors = "PhoenixRa"
+displayName = "VRCarry"
+authors = "Ninix"
 displayTest = "NONE"
 description = '''
-The Example Addon for Visor
+Carry for Visor
 
 '''
 
-[[dependencies.visor_example]]
+[[dependencies.vrcarry]]
 modId = "visor"
 mandatory = true
 versionRange = "[0.2.0-alpha,)"
 ordering = "AFTER"
 side = "BOTH"
 
-[[dependencies.visor_example]]
+[[dependencies.vrcarry]]
 modId = "forge"
 mandatory = true
 versionRange = "[46,)"
 ordering = "AFTER"
 side = "BOTH"
 
-[[dependencies.visor_example]]
+[[dependencies.vrcarry]]
 modId = "minecraft"
 mandatory = true
 versionRange = "[1.20,1.20.1]"
