@@ -101,7 +101,7 @@ allprojects {
     }
     // ----
 
-    compileJava {
-        dependsOn(clean)
-    }
+//    compileJava {
+//        dependsOn(clean)
+//    }
 }

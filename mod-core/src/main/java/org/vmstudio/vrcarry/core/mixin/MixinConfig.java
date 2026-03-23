@@ -45,14 +45,12 @@ public class MixinConfig implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        if (!ModLoader.get().isModLoaded(VisorExample.MOD_ID)) {
-            LOGGER.info("{} failed to load, canceled applying mixin '{}'",
-                    VisorExample.MOD_NAME, mixinClassName
-            );
-            return false;
-        }
-
-
+//        if (!ModLoader.get().isModLoaded(VisorExample.MOD_ID)) {
+//            LOGGER.info("{} failed to load, canceled applying mixin '{}'",
+//                VisorExample.MOD_NAME, mixinClassName
+//            );
+//            return false;
+//        }
         return true;
     }
 }
