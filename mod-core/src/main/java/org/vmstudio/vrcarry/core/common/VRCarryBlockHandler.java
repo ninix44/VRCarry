@@ -129,7 +129,7 @@ public class VRCarryBlockHandler {
             return;
         }
 
-        player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 2, 1, false, false, false));
+        player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 220, 0, false, false, true));
     }
 
     public static boolean canInteractWhileCarrying(ServerPlayer player) {
