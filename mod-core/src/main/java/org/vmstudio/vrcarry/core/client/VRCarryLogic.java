@@ -318,7 +318,7 @@ public class VRCarryLogic {
 
         poseStack.pushPose();
         poseStack.translate(renderPos.x - cameraPos.x, renderPos.y - cameraPos.y, renderPos.z - cameraPos.z);
-        poseStack.mulPose(Axis.YP.rotationDegrees(carriedRenderYaw - mc.player.getYRot() + 90.0F));
+        poseStack.mulPose(Axis.YP.rotationDegrees(carriedRenderYaw - mc.player.getYRot()));
         poseStack.scale(0.82F, 0.82F, 0.82F);
         mc.getItemRenderer().renderStatic(
             renderStack,
