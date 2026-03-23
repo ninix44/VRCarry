@@ -12,7 +12,7 @@
   "environment": "*",
   "entrypoints": {
     "main": [
-      "org.vmstudio.vrcarry.fabric.VRCarryMod"
+      "org.vmstudio.vrcarry.fabric.ExampleMod"
     ]
   },
   "mixins": [

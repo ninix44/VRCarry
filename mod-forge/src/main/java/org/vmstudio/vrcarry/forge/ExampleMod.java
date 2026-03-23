@@ -1,21 +1,22 @@
-package org.vmstudio.vrcarry.fabric;
+package org.vmstudio.vrcarry.forge;
 
 import org.vmstudio.visor.api.ModLoader;
 import org.vmstudio.visor.api.VisorAPI;
-import org.vmstudio.vrcarry.core.client.VRCarryAddonClient;
+import org.vmstudio.vrcarry.core.client.ExampleAddonClient;
+import org.vmstudio.vrcarry.core.common.VisorExample;
 import org.vmstudio.vrcarry.core.server.VRCarryAddonServer;
-import net.fabricmc.api.ModInitializer;
+import net.minecraftforge.fml.common.Mod;
 
-public class VRCarryMod implements ModInitializer {
-    @Override
-    public void onInitialize() {
+@Mod(VisorExample.MOD_ID)
+public class ExampleMod {
+    public ExampleMod() {
         if (ModLoader.get().isDedicatedServer()) {
             VisorAPI.registerAddon(
                     new VRCarryAddonServer()
             );
         } else {
             VisorAPI.registerAddon(
-                    new VRCarryAddonClient()
+                    new ExampleAddonClient()
             );
         }
     }

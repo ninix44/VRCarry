@@ -15,34 +15,34 @@ import org.jetbrains.annotations.NotNull;
 import java.util.List;
 
 @RegisterVROverlayTemplate(
-        id = VROverlayTemplateCarry.ID,
-        name = VROverlayTemplateCarry.NAME,
-        description = VROverlayTemplateCarry.DESCRIPTION
+        id = VROverlayTemplateExample.ID,
+        name = VROverlayTemplateExample.NAME,
+        description = VROverlayTemplateExample.DESCRIPTION
 )
-public class VROverlayTemplateCarry extends VROverlayTemplateScreen {
-    public static final String ID = "template_carry";
-    public static final String NAME = "Carry template";
-    public static final String DESCRIPTION = "Carry overlay template for VRCarry";
+public class VROverlayTemplateExample extends VROverlayTemplateScreen {
+    public static final String ID = "template_example";
+    public static final String NAME = "Example template";
+    public static final String DESCRIPTION = "Example description";
 
-    private final Component text = Component.literal("Carry Overlay Template");
+    private final Component text = Component.literal("Template Overlay Example");
 
-    public VROverlayTemplateCarry(@NotNull VisorAddon owner, @NotNull String id) {
+    public VROverlayTemplateExample(@NotNull VisorAddon owner, @NotNull String id) {
         super(owner, id);
         //if you want it to be enabled once created
-        setEnabled(true);
+        setEnabled(false); // true
 
     }
 
     @Override
     protected void onRender(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTicks) {
-        guiGraphics.drawCenteredString(this.font, text,
-                width / 2, height / 2, AtumColor.WHITE.asInt());
+        // guiGraphics.drawCenteredString(this.font, text,
+        //       width/2, height/2, AtumColor.WHITE.asInt());
 
     }
 
     @Override
     protected boolean updateVisibility() {
-        return true;
+        return false; // true
     }
 
     @Override

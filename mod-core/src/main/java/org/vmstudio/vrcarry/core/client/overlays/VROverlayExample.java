@@ -6,11 +6,11 @@ import org.vmstudio.visor.api.common.addon.VisorAddon;
 import net.minecraft.client.gui.GuiGraphics;
 import org.jetbrains.annotations.NotNull;
 
-public class VROverlayCarry extends VROverlayScreen {
-    public static final String ID = "carry";
+public class VROverlayExample extends VROverlayScreen {
+    public static final String ID = "example";
 
 
-    public VROverlayCarry(@NotNull VisorAddon owner, @NotNull String id) {
+    public VROverlayExample(@NotNull VisorAddon owner, @NotNull String id) {
         super(owner, id);
         //if you want it to be enabled once created
         setEnabled(true);
