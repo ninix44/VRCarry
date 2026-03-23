@@ -3,10 +3,12 @@ package org.vmstudio.vrcarry.core.client;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.vmstudio.visor.api.ModLoader;
 import org.vmstudio.vrcarry.core.client.overlays.VROverlayExample;
 import org.vmstudio.vrcarry.core.client.overlays.VROverlayTemplateExample;
 import org.vmstudio.vrcarry.core.common.VisorExample;
 import org.vmstudio.visor.api.VisorAPI;
+import org.vmstudio.visor.api.client.render.RenderPipelineStage;
 import org.vmstudio.visor.api.common.addon.VisorAddon;
 
 import java.util.List;
@@ -30,6 +32,11 @@ public class ExampleAddonClient implements VisorAddon {
                                 */
                 )
             );
+
+        ModLoader.get().addToRenderPipeline(
+            RenderPipelineStage.AFTER_TRANSLUCENT,
+            VRCarryLogic::renderCarriedBlockInWorld
+        );
     }
 
     @Override

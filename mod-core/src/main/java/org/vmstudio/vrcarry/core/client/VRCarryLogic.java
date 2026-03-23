@@ -1,18 +1,21 @@
 package org.vmstudio.vrcarry.core.client;
 
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.LightTexture;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.particles.ParticleTypes;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.FloatTag;
-import net.minecraft.nbt.ListTag;
 import net.minecraft.sounds.SoundEvents;
-import net.minecraft.world.entity.Display;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
@@ -50,8 +53,8 @@ public class VRCarryLogic {
 
     private static Vec3 prevMainPos;
     private static Vec3 prevOffPos;
-    private static Display.ItemDisplay carriedDisplay;
-    private static BlockState renderedState;
+    private static boolean wasCarryingLastTick = false;
+    private static float carriedRenderYaw = 180.0F;
 
     public static void tick() {
         Minecraft mc = Minecraft.getInstance();
@@ -61,7 +64,6 @@ public class VRCarryLogic {
 
         VRLocalPlayer vrPlayer = VisorAPI.client().getVRLocalPlayer();
         if (vrPlayer == null || !VisorAPI.clientState().playMode().canPlayVR()) {
-            removeDisplay(mc);
             return;
         }
 
@@ -70,8 +72,23 @@ public class VRCarryLogic {
         }
 
         PlayerPoseClient pose = vrPlayer.getPoseData(PlayerPoseType.TICK);
-        updateCarriedDisplay(mc, pose);
+        updateRenderLock(mc);
         processHands(mc, pose);
+    }
+
+    private static void updateRenderLock(Minecraft mc) {
+        VRCarryData carryData = VRCarryDataManager.getCarryData(mc.player);
+        boolean isCarrying = carryData.isCarrying(VRCarryData.CarryType.BLOCK);
+
+        if (isCarrying && !wasCarryingLastTick) {
+            carriedRenderYaw = resolveRenderYaw(carryData.getBlockState(), mc.player.getYRot());
+        }
+
+        if (!isCarrying) {
+            carriedRenderYaw = 180.0F;
+        }
+
+        wasCarryingLastTick = isCarrying;
     }
 
     private static void processHands(Minecraft mc, PlayerPoseClient pose) {
@@ -217,79 +234,6 @@ public class VRCarryLogic {
         return mc.level.clip(new ClipContext(start, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, mc.player));
     }
 
-    private static void updateCarriedDisplay(Minecraft mc, PlayerPoseClient pose) {
-        VRCarryData carryData = VRCarryDataManager.getCarryData(mc.player);
-        if (!carryData.isCarrying(VRCarryData.CarryType.BLOCK)) {
-            removeDisplay(mc);
-            return;
-        }
-
-        if (carriedDisplay == null || !carriedDisplay.isAlive()) {
-            carriedDisplay = EntityType.ITEM_DISPLAY.create(mc.level);
-            if (carriedDisplay == null) {
-                return;
-            }
-            carriedDisplay.setNoGravity(true);
-            carriedDisplay.setInvulnerable(true);
-            mc.level.addFreshEntity(carriedDisplay);
-            renderedState = null;
-        }
-
-        BlockState state = carryData.getBlockState();
-        if (renderedState == null || renderedState != state) {
-            ItemStack renderStack = new ItemStack(state.getBlock());
-            CompoundTag tag = new CompoundTag();
-            carriedDisplay.saveWithoutId(tag);
-            tag.put("item", renderStack.save(new CompoundTag()));
-            tag.putString("item_display", "fixed");
-            tag.putFloat("view_range", 6.0F);
-            tag.putFloat("width", 2.5F);
-            tag.putFloat("height", 2.5F);
-            tag.putFloat("shadow_radius", 0.0F);
-            tag.putFloat("shadow_strength", 0.0F);
-
-            CompoundTag transform = new CompoundTag();
-            ListTag scale = new ListTag();
-            scale.add(FloatTag.valueOf(2.25F));
-            scale.add(FloatTag.valueOf(2.25F));
-            scale.add(FloatTag.valueOf(2.25F));
-            transform.put("scale", scale);
-            tag.put("transformation", transform);
-
-            carriedDisplay.load(tag);
-            renderedState = state;
-        }
-
-        Vec3 mainHandPos = getGrabPoint(pose.getMainHand());
-        Vec3 offHandPos = getGrabPoint(pose.getOffhand());
-        Vec3 midpoint = midpoint(mainHandPos, offHandPos);
-        Vec3 handDirection = offHandPos.subtract(mainHandPos);
-        if (handDirection.lengthSqr() < 1.0E-6D) {
-            handDirection = new Vec3(1.0D, 0.0D, 0.0D);
-        } else {
-            handDirection = handDirection.normalize();
-        }
-        Vec3 playerForward = mc.player.getLookAngle().multiply(1.0D, 0.0D, 1.0D);
-        if (playerForward.lengthSqr() < 1.0E-6D) {
-            playerForward = new Vec3(0.0D, 0.0D, 1.0D);
-        } else {
-            playerForward = playerForward.normalize();
-        }
-        Vec3 displayPos = midpoint.add(playerForward.scale(0.22D)).add(0.0D, 0.02D, 0.0D);
-
-        carriedDisplay.setPos(displayPos);
-        carriedDisplay.setXRot(15.0F);
-        carriedDisplay.setYRot((float) Math.toDegrees(Math.atan2(handDirection.x, handDirection.z)));
-    }
-
-    private static void removeDisplay(Minecraft mc) {
-        if (carriedDisplay != null) {
-            carriedDisplay.discard();
-            carriedDisplay = null;
-        }
-        renderedState = null;
-    }
-
     private static BlockPos getPlacementPos(Minecraft mc, BlockHitResult hitResult) {
         BlockPos pos = hitResult.getBlockPos();
         if (!mc.level.getBlockState(pos).canBeReplaced()) {
@@ -327,6 +271,87 @@ public class VRCarryLogic {
 
     private static Vec3 midpoint(Vec3 a, Vec3 b) {
         return new Vec3((a.x + b.x) * 0.5D, (a.y + b.y) * 0.5D, (a.z + b.z) * 0.5D);
+    }
+
+    public static boolean shouldRenderFirstPersonCarry(LocalPlayer player) {
+        return player != null && VRCarryDataManager.getCarryData(player).isCarrying(VRCarryData.CarryType.BLOCK);
+    }
+
+    public static ItemStack getFirstPersonRenderStack(LocalPlayer player) {
+        if (player == null) {
+            return ItemStack.EMPTY;
+        }
+
+        VRCarryData carryData = VRCarryDataManager.getCarryData(player);
+        if (!carryData.isCarrying(VRCarryData.CarryType.BLOCK)) {
+            return ItemStack.EMPTY;
+        }
+
+        BlockState state = carryData.getBlockState();
+        return new ItemStack(state.getBlock());
+    }
+
+    public static void renderCarriedBlockInWorld(PoseStack poseStack, float partialTicks) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.level == null) {
+            return;
+        }
+
+        VRLocalPlayer vrPlayer = VisorAPI.client().getVRLocalPlayer();
+        if (vrPlayer == null || !VisorAPI.clientState().playMode().canPlayVR()) {
+            return;
+        }
+
+        VRCarryData carryData = VRCarryDataManager.getCarryData(mc.player);
+        if (!carryData.isCarrying(VRCarryData.CarryType.BLOCK)) {
+            return;
+        }
+
+        PlayerPoseClient renderPose = vrPlayer.getPoseData(PlayerPoseType.RENDER);
+        Vec3 mainHandPos = getGrabPoint(renderPose.getMainHand());
+        Vec3 offHandPos = getGrabPoint(renderPose.getOffhand());
+        Vec3 midpoint = midpoint(mainHandPos, offHandPos);
+        Vec3 renderPos = midpoint.add(0.0D, -0.16D, 0.0D);
+        Vec3 cameraPos = mc.gameRenderer.getMainCamera().getPosition();
+        ItemStack renderStack = new ItemStack(carryData.getBlockState().getBlock());
+        MultiBufferSource.BufferSource bufferSource = mc.renderBuffers().bufferSource();
+
+        poseStack.pushPose();
+        poseStack.translate(renderPos.x - cameraPos.x, renderPos.y - cameraPos.y, renderPos.z - cameraPos.z);
+        poseStack.mulPose(Axis.YP.rotationDegrees(carriedRenderYaw - mc.player.getYRot() + 90.0F));
+        poseStack.scale(0.82F, 0.82F, 0.82F);
+        mc.getItemRenderer().renderStatic(
+            renderStack,
+            ItemDisplayContext.FIXED,
+            LightTexture.pack(15, 15),
+            OverlayTexture.NO_OVERLAY,
+            poseStack,
+            bufferSource,
+            mc.level,
+            0
+        );
+        poseStack.popPose();
+        bufferSource.endBatch();
+    }
+
+    private static float resolveRenderYaw(BlockState state, float playerYaw) {
+        for (var property : state.getProperties()) {
+            if (property instanceof DirectionProperty directionProperty && "facing".equals(directionProperty.getName())) {
+                Direction direction = state.getValue(directionProperty);
+                if (direction.getAxis().isHorizontal()) {
+                    return switch (direction) {
+                        case NORTH -> 180.0F;
+                        case SOUTH -> 0.0F;
+                        case WEST -> 270.0F;
+                        case EAST -> 90.0F;
+                        default -> 180.0F;
+                    };
+                }
+            }
+        }
+
+        float snapped = Math.round(playerYaw / 90.0F) * 90.0F;
+        return snapped + 180.0F;
     }
 
     private static void resetPickup() {
