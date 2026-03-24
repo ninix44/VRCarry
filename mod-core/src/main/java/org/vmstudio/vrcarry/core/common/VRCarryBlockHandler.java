@@ -387,16 +387,21 @@ public class VRCarryBlockHandler {
     }
 
     public static Vec3 getBedPassengerOffset(Entity carrier) {
-        Vec3 forward = carrier.getLookAngle();
-        Vec3 flatForward = new Vec3(forward.x, 0.0D, forward.z);
-        if (flatForward.lengthSqr() < 1.0E-4D) {
-            flatForward = new Vec3(0.0D, 0.0D, 1.0D);
-        } else {
-            flatForward = flatForward.normalize();
+        Direction facing = null;
+        if (carrier instanceof Player player) {
+            VRCarryData carryData = VRCarryDataManager.getCarryData(player);
+            if (carryData.isCarrying(CarryType.BED)) {
+                facing = carryData.getBedFootState().getValue(BedBlock.FACING);
+            }
         }
 
-        Vec3 right = new Vec3(-flatForward.z, 0.0D, flatForward.x);
-        return flatForward.scale(0.45D).add(right.scale(0.02D)).add(0.0D, 0.62D, 0.0D);
+        if (facing == null) {
+            facing = Direction.SOUTH;
+        }
+
+        Vec3 forward = new Vec3(facing.getStepX(), 0.0D, facing.getStepZ());
+        Vec3 right = new Vec3(-forward.z, 0.0D, forward.x);
+        return forward.scale(0.45D).add(right.scale(0.02D)).add(0.0D, 0.62D, 0.0D);
     }
 
     public static float getBedYaw(Direction facing) {

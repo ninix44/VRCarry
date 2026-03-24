@@ -55,6 +55,13 @@ public class VRCarryLogic {
     private static final double MAX_HAND_SPEED = 0.14D;
     private static final double MAX_PLACE_HEIGHT = 0.55D;
 
+    // for the player on the bed
+    private static final float BED_PASSENGER_SCALE = 0.20F;
+    private static final double BED_PASSENGER_OFFSET_RIGHT = -0.50D;
+    private static final double BED_PASSENGER_OFFSET_UP = 0.65D;
+    private static final double BED_PASSENGER_OFFSET_FORWARD = -1.90D;
+    private static final double BED_PASSENGER_OFFSET_TOWARD_PLAYER = -2.98D;
+
     private static int pickupTicks = 0;
     private static int placeTicks = 0;
     private static int actionCooldown = 0;
@@ -454,17 +461,22 @@ public class VRCarryLogic {
         double cos = Math.cos(angle);
 
         Vec3 renderPos = handMidpoint.add(0.0D, -0.16D, 0.0D);
-        double localX = 0.04D;
-        double localY = 0.37D;
-        double localZ = 0.18D;
+        double localX = BED_PASSENGER_OFFSET_RIGHT;
+        double localY = BED_PASSENGER_OFFSET_UP;
+        double localZ = BED_PASSENGER_OFFSET_FORWARD;
+        double localToward = BED_PASSENGER_OFFSET_TOWARD_PLAYER;
 
-        double worldX = renderPos.x + localX * cos - localZ * sin;
-        double worldZ = renderPos.z + localX * sin + localZ * cos;
+        double worldX = renderPos.x + localX * cos - localZ * sin + localToward * sin;
+        double worldZ = renderPos.z + localX * sin + localZ * cos - localToward * cos;
         return new Vec3(worldX, renderPos.y + localY, worldZ);
     }
 
     private static float getBedRenderYaw() {
         return VRCarryBlockHandler.getBedYaw(carriedBedFacing) + 180.0F;
+    }
+
+    public static float getBedPassengerScale() {
+        return BED_PASSENGER_SCALE;
     }
 
     private static void resetPickup() {
