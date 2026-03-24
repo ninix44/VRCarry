@@ -13,6 +13,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.vmstudio.vrcarry.core.common.VRCarryBlockHandler;
 import org.vmstudio.vrcarry.core.common.VRCarryData;
 import org.vmstudio.vrcarry.core.common.VRCarryDataManager;
 
@@ -53,6 +54,13 @@ public abstract class PlayerMixin extends LivingEntity implements VRCarryDataMan
     private void onReadAdditionalSaveData(CompoundTag tag, CallbackInfo ci) {
         if (tag.contains("VRCarryData")) {
             setVRCarryData(new VRCarryData(tag.getCompound("VRCarryData")));
+        }
+    }
+
+    @Inject(method = "stopSleepInBed", at = @At("HEAD"), cancellable = true)
+    private void onStopSleepInBed(boolean skipSleepTimer, boolean updateSleepingPlayers, CallbackInfo ci) {
+        if (VRCarryBlockHandler.isLockedBedPassenger((Player) (Object) this)) {
+            ci.cancel();
         }
     }
 }

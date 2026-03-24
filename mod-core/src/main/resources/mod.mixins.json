@@ -4,11 +4,14 @@
   "plugin": "org.vmstudio.vrcarry.core.mixin.MixinConfig",
   "compatibilityLevel": "JAVA_17",
   "client": [
+    "client.LivingEntityRendererMixin"
   ],
   "server": [
   ],
   "minVersion": "0.8.4",
   "mixins": [
+    "EntityMixin",
+    "LivingEntityMixin",
     "PlayerMixin"
   ]
 }

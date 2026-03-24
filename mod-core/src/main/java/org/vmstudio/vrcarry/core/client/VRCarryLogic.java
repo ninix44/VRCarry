@@ -3,18 +3,24 @@ package org.vmstudio.vrcarry.core.client;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.renderer.LightTexture;
+import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.sounds.SoundEvents;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemDisplayContext;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -30,6 +36,8 @@ import org.vmstudio.visor.api.common.player.VRPose;
 import org.vmstudio.vrcarry.core.common.VRCarryBlockHandler;
 import org.vmstudio.vrcarry.core.common.VRCarryData;
 import org.vmstudio.vrcarry.core.common.VRCarryDataManager;
+
+import java.util.UUID;
 
 public class VRCarryLogic {
 
@@ -55,6 +63,7 @@ public class VRCarryLogic {
     private static Vec3 prevOffPos;
     private static boolean wasCarryingLastTick = false;
     private static float carriedRenderYaw = 180.0F;
+    private static Direction carriedBedFacing = Direction.SOUTH;
 
     public static void tick() {
         Minecraft mc = Minecraft.getInstance();
@@ -72,20 +81,25 @@ public class VRCarryLogic {
         }
 
         PlayerPoseClient pose = vrPlayer.getPoseData(PlayerPoseType.TICK);
+        syncBedOccupantsClient(mc, pose);
         updateRenderLock(mc);
         processHands(mc, pose);
     }
 
     private static void updateRenderLock(Minecraft mc) {
         VRCarryData carryData = VRCarryDataManager.getCarryData(mc.player);
-        boolean isCarrying = carryData.isCarrying(VRCarryData.CarryType.BLOCK);
+        boolean isCarrying = carryData.isCarrying(VRCarryData.CarryType.BLOCK) || carryData.isCarrying(VRCarryData.CarryType.BED);
 
         if (isCarrying && !wasCarryingLastTick) {
-            carriedRenderYaw = resolveRenderYaw(carryData.getBlockState(), mc.player.getYRot());
+            carriedRenderYaw = resolveRenderYaw(getRenderState(carryData), mc.player.getYRot());
+            if (carryData.isCarrying(VRCarryData.CarryType.BED)) {
+                carriedBedFacing = carryData.getBedFootState().getValue(BedBlock.FACING);
+            }
         }
 
         if (!isCarrying) {
             carriedRenderYaw = 180.0F;
+            carriedBedFacing = Direction.SOUTH;
         }
 
         wasCarryingLastTick = isCarrying;
@@ -101,13 +115,13 @@ public class VRCarryLogic {
 
         VRCarryData carryData = VRCarryDataManager.getCarryData(mc.player);
         if (!carryData.isCarrying()) {
-            handlePickup(mc, pose, mainHandPos, offHandPos, mainSpeed, offSpeed);
+            handlePickup(mc, mainHandPos, offHandPos, mainSpeed, offSpeed);
         } else {
-            handlePlacement(mc, pose, mainHandPos, offHandPos, mainSpeed, offSpeed);
+            handlePlacement(mc, mainHandPos, offHandPos, mainSpeed, offSpeed);
         }
     }
 
-    private static void handlePickup(Minecraft mc, PlayerPoseClient pose, Vec3 mainHandPos, Vec3 offHandPos, double mainSpeed, double offSpeed) {
+    private static void handlePickup(Minecraft mc, Vec3 mainHandPos, Vec3 offHandPos, double mainSpeed, double offSpeed) {
         if (!mc.player.getMainHandItem().isEmpty() || !mc.player.getOffhandItem().isEmpty() || actionCooldown > 0) {
             resetPickup();
             return;
@@ -139,7 +153,7 @@ public class VRCarryLogic {
         }
     }
 
-    private static void handlePlacement(Minecraft mc, PlayerPoseClient pose, Vec3 mainHandPos, Vec3 offHandPos, double mainSpeed, double offSpeed) {
+    private static void handlePlacement(Minecraft mc, Vec3 mainHandPos, Vec3 offHandPos, double mainSpeed, double offSpeed) {
         if (!mc.player.getMainHandItem().isEmpty() || !mc.player.getOffhandItem().isEmpty() || actionCooldown > 0) {
             resetPlace();
             return;
@@ -204,11 +218,11 @@ public class VRCarryLogic {
                     }
 
                     BlockState state = mc.level.getBlockState(pos);
-                    var shape = state.getShape(mc.level, pos);
-                    AABB bounds = shape.bounds();
-                    if (shape.isEmpty()) {
+                    AABB bounds = state.getShape(mc.level, pos).bounds();
+                    if (bounds.getXsize() <= 0.0D || bounds.getYsize() <= 0.0D || bounds.getZsize() <= 0.0D) {
                         bounds = new AABB(0.0D, 0.0D, 0.0D, 1.0D, 1.0D, 1.0D);
                     }
+
                     AABB worldBounds = bounds.move(pos);
                     Vec3 closest = new Vec3(
                         clamp(handPos.x, worldBounds.minX, worldBounds.maxX),
@@ -244,23 +258,29 @@ public class VRCarryLogic {
 
     private static boolean wouldPlaceInsidePlayer(Minecraft mc, BlockPos placePos) {
         VRCarryData carryData = VRCarryDataManager.getCarryData(mc.player);
-        BlockState carriedState = carryData.getBlockState();
-        AABB shapeBox = carriedState.getShape(mc.level, placePos).bounds();
-        if (shapeBox.getXsize() <= 0.0D || shapeBox.getYsize() <= 0.0D || shapeBox.getZsize() <= 0.0D) {
-            shapeBox = new AABB(0.0D, 0.0D, 0.0D, 1.0D, 1.0D, 1.0D);
+        AABB placeBox;
+
+        if (carryData.isCarrying(VRCarryData.CarryType.BED)) {
+            return false;
+        } else {
+            BlockState carriedState = carryData.getBlockState();
+            placeBox = getShapeBounds(carriedState, mc, placePos).move(placePos);
         }
 
-        AABB placeBox = shapeBox.move(placePos);
         AABB playerBox = mc.player.getBoundingBox().inflate(-0.05D);
         return placeBox.intersects(playerBox) || placePos.equals(mc.player.blockPosition()) || placePos.equals(mc.player.blockPosition().below());
     }
 
-    private static double clamp(double value, double min, double max) {
-        return Math.max(min, Math.min(max, value));
+    private static AABB getShapeBounds(BlockState state, Minecraft mc, BlockPos pos) {
+        AABB shapeBox = state.getShape(mc.level, pos).bounds();
+        if (shapeBox.getXsize() <= 0.0D || shapeBox.getYsize() <= 0.0D || shapeBox.getZsize() <= 0.0D) {
+            return new AABB(0.0D, 0.0D, 0.0D, 1.0D, 1.0D, 1.0D);
+        }
+        return shapeBox;
     }
 
-    private static Vec3 poseToVec(VRPose pose) {
-        return new Vec3(pose.getPosition().x(), pose.getPosition().y(), pose.getPosition().z());
+    private static double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private static Vec3 getGrabPoint(VRPose pose) {
@@ -287,8 +307,7 @@ public class VRCarryLogic {
             return ItemStack.EMPTY;
         }
 
-        BlockState state = carryData.getBlockState();
-        return new ItemStack(state.getBlock());
+        return new ItemStack(carryData.getBlockState().getBlock());
     }
 
     public static void renderCarriedBlockInWorld(PoseStack poseStack, float partialTicks) {
@@ -303,7 +322,7 @@ public class VRCarryLogic {
         }
 
         VRCarryData carryData = VRCarryDataManager.getCarryData(mc.player);
-        if (!carryData.isCarrying(VRCarryData.CarryType.BLOCK)) {
+        if (!carryData.isCarrying()) {
             return;
         }
 
@@ -313,25 +332,49 @@ public class VRCarryLogic {
         Vec3 midpoint = midpoint(mainHandPos, offHandPos);
         Vec3 renderPos = midpoint.add(0.0D, -0.16D, 0.0D);
         Vec3 cameraPos = mc.gameRenderer.getMainCamera().getPosition();
-        ItemStack renderStack = new ItemStack(carryData.getBlockState().getBlock());
         MultiBufferSource.BufferSource bufferSource = mc.renderBuffers().bufferSource();
 
         poseStack.pushPose();
         poseStack.translate(renderPos.x - cameraPos.x, renderPos.y - cameraPos.y, renderPos.z - cameraPos.z);
-        poseStack.mulPose(Axis.YP.rotationDegrees(carriedRenderYaw - mc.player.getYRot()));
         poseStack.scale(0.82F, 0.82F, 0.82F);
-        mc.getItemRenderer().renderStatic(
-            renderStack,
-            ItemDisplayContext.FIXED,
-            LightTexture.pack(15, 15),
-            OverlayTexture.NO_OVERLAY,
-            poseStack,
-            bufferSource,
-            mc.level,
-            0
-        );
+
+        if (carryData.isCarrying(VRCarryData.CarryType.BED)) {
+            poseStack.mulPose(Axis.YP.rotationDegrees(getBedRenderYaw()));
+            renderCarriedBed(mc, carryData, poseStack, bufferSource, renderPos);
+        } else if (carryData.isCarrying(VRCarryData.CarryType.BLOCK)) {
+            poseStack.mulPose(Axis.YP.rotationDegrees(carriedRenderYaw - mc.player.getYRot()));
+            ItemStack renderStack = new ItemStack(carryData.getBlockState().getBlock());
+            mc.getItemRenderer().renderStatic(
+                renderStack,
+                ItemDisplayContext.FIXED,
+                LevelRenderer.getLightColor(mc.level, BlockPos.containing(renderPos)),
+                OverlayTexture.NO_OVERLAY,
+                poseStack,
+                bufferSource,
+                mc.level,
+                0
+            );
+        }
+
         poseStack.popPose();
         bufferSource.endBatch();
+    }
+
+    private static void renderCarriedBed(Minecraft mc, VRCarryData carryData, PoseStack poseStack, MultiBufferSource.BufferSource bufferSource, Vec3 renderPos) {
+        BlockState footState = carryData.getBedFootState().setValue(BedBlock.PART, BedPart.FOOT);
+        int packedLight = LevelRenderer.getLightColor(mc.level, BlockPos.containing(renderPos));
+
+        poseStack.pushPose();
+        poseStack.translate(0.0D, 0.0D, -0.25D);
+        mc.getBlockRenderer().renderSingleBlock(footState, poseStack, bufferSource, packedLight, OverlayTexture.NO_OVERLAY);
+        poseStack.popPose();
+    }
+
+    private static BlockState getRenderState(VRCarryData carryData) {
+        if (carryData.isCarrying(VRCarryData.CarryType.BED)) {
+            return carryData.getBedFootState();
+        }
+        return carryData.getBlockState();
     }
 
     private static float resolveRenderYaw(BlockState state, float playerYaw) {
@@ -352,6 +395,76 @@ public class VRCarryLogic {
 
         float snapped = Math.round(playerYaw / 90.0F) * 90.0F;
         return snapped + 180.0F;
+    }
+
+    private static void syncBedOccupantsClient(Minecraft mc, PlayerPoseClient localPose) {
+        ClientLevel level = mc.level;
+        if (level == null) {
+            return;
+        }
+
+        for (var carrier : level.players()) {
+            VRCarryData carryData = VRCarryDataManager.getCarryData(carrier);
+            if (!carryData.isCarrying(VRCarryData.CarryType.BED)) {
+                continue;
+            }
+
+            UUID occupantUuid = carryData.getBedOccupantUuid();
+            if (occupantUuid == null) {
+                continue;
+            }
+
+            Entity occupant = findEntityByUuid(level, occupantUuid, carrier);
+            if (!(occupant instanceof LivingEntity livingOccupant)) {
+                continue;
+            }
+
+            Vec3 targetPos;
+            if (carrier == mc.player && localPose != null) {
+                Vec3 mainHandPos = getGrabPoint(localPose.getMainHand());
+                Vec3 offHandPos = getGrabPoint(localPose.getOffhand());
+                targetPos = getClientBedOccupantPos(mc, midpoint(mainHandPos, offHandPos));
+            } else {
+                Vec3 offset = VRCarryBlockHandler.getBedPassengerOffset(carrier);
+                targetPos = new Vec3(carrier.getX() + offset.x, carrier.getY() + offset.y, carrier.getZ() + offset.z);
+            }
+
+            occupant.setPos(targetPos.x, targetPos.y, targetPos.z);
+            float bedYaw = VRCarryBlockHandler.getBedYaw(carryData.getBedFootState().getValue(BedBlock.FACING));
+            float occupantYaw = bedYaw - 90.0F;
+            occupant.setYRot(occupantYaw);
+            occupant.setYHeadRot(occupantYaw);
+            occupant.setYBodyRot(occupantYaw);
+            occupant.setDeltaMovement(Vec3.ZERO);
+            livingOccupant.setPose(Pose.SLEEPING);
+        }
+    }
+
+    private static Entity findEntityByUuid(ClientLevel level, UUID uuid, Entity carrier) {
+        AABB searchBox = carrier.getBoundingBox().inflate(96.0D);
+        for (Entity entity : level.getEntities(carrier, searchBox, candidate -> candidate.getUUID().equals(uuid))) {
+            return entity;
+        }
+        return null;
+    }
+
+    private static Vec3 getClientBedOccupantPos(Minecraft mc, Vec3 handMidpoint) {
+        float angle = (float) Math.toRadians(getBedRenderYaw());
+        double sin = Math.sin(angle);
+        double cos = Math.cos(angle);
+
+        Vec3 renderPos = handMidpoint.add(0.0D, -0.16D, 0.0D);
+        double localX = 0.04D;
+        double localY = 0.37D;
+        double localZ = 0.18D;
+
+        double worldX = renderPos.x + localX * cos - localZ * sin;
+        double worldZ = renderPos.z + localX * sin + localZ * cos;
+        return new Vec3(worldX, renderPos.y + localY, worldZ);
+    }
+
+    private static float getBedRenderYaw() {
+        return VRCarryBlockHandler.getBedYaw(carriedBedFacing) + 180.0F;
     }
 
     private static void resetPickup() {

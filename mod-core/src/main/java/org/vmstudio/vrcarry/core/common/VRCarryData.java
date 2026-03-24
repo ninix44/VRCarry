@@ -9,6 +9,8 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.UUID;
+
 public class VRCarryData {
 
     private CarryType type;
@@ -55,6 +57,49 @@ public class VRCarryData {
         return BlockEntity.loadStatic(pos, getBlockState(), nbt.getCompound("block_entity"));
     }
 
+    public void setBed(BlockState footState, BlockState headState, @Nullable UUID occupantUuid) {
+        this.type = CarryType.BED;
+
+        if (footState.hasProperty(BlockStateProperties.WATERLOGGED)) {
+            footState = footState.setValue(BlockStateProperties.WATERLOGGED, false);
+        }
+
+        if (headState.hasProperty(BlockStateProperties.WATERLOGGED)) {
+            headState = headState.setValue(BlockStateProperties.WATERLOGGED, false);
+        }
+
+        nbt.put("bed_foot_state", NbtUtils.writeBlockState(footState));
+        nbt.put("bed_head_state", NbtUtils.writeBlockState(headState));
+
+        if (occupantUuid != null) {
+            nbt.putUUID("bed_occupant", occupantUuid);
+        } else {
+            nbt.remove("bed_occupant");
+        }
+    }
+
+    public BlockState getBedFootState() {
+        if (!isCarrying(CarryType.BED)) {
+            throw new IllegalStateException("No carried bed stored");
+        }
+        return NbtUtils.readBlockState(BuiltInRegistries.BLOCK.asLookup(), nbt.getCompound("bed_foot_state"));
+    }
+
+    public BlockState getBedHeadState() {
+        if (!isCarrying(CarryType.BED)) {
+            throw new IllegalStateException("No carried bed stored");
+        }
+        return NbtUtils.readBlockState(BuiltInRegistries.BLOCK.asLookup(), nbt.getCompound("bed_head_state"));
+    }
+
+    @Nullable
+    public UUID getBedOccupantUuid() {
+        if (!isCarrying(CarryType.BED) || !nbt.hasUUID("bed_occupant")) {
+            return null;
+        }
+        return nbt.getUUID("bed_occupant");
+    }
+
     public boolean isCarrying() {
         return type != CarryType.INVALID;
     }
@@ -74,6 +119,7 @@ public class VRCarryData {
 
     public enum CarryType {
         BLOCK,
+        BED,
         INVALID
     }
 }
