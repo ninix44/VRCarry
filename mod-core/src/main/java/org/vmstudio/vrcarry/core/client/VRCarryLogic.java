@@ -69,7 +69,9 @@ public class VRCarryLogic {
     private static Vec3 prevMainPos;
     private static Vec3 prevOffPos;
     private static boolean wasCarryingLastTick = false;
-    private static float carriedRenderYaw = 180.0F;
+
+    private static float initialVrYaw = 0.0F;
+    private static float lockedBlockYaw = 180.0F;
     private static Direction carriedBedFacing = Direction.SOUTH;
 
     public static void tick() {
@@ -88,25 +90,30 @@ public class VRCarryLogic {
         }
 
         PlayerPoseClient pose = vrPlayer.getPoseData(PlayerPoseType.TICK);
+        updateRenderLock(mc, pose);
         syncBedOccupantsClient(mc, pose);
-        updateRenderLock(mc);
         processHands(mc, pose);
     }
 
-    private static void updateRenderLock(Minecraft mc) {
+    private static void updateRenderLock(Minecraft mc, PlayerPoseClient pose) {
         VRCarryData carryData = VRCarryDataManager.getCarryData(mc.player);
         boolean isCarrying = carryData.isCarrying(VRCarryData.CarryType.BLOCK) || carryData.isCarrying(VRCarryData.CarryType.BED);
 
         if (isCarrying && !wasCarryingLastTick) {
-            carriedRenderYaw = resolveRenderYaw(getRenderState(carryData), mc.player.getYRot());
+            initialVrYaw = (float) Math.toDegrees(pose.getRotationY());
+
             if (carryData.isCarrying(VRCarryData.CarryType.BED)) {
                 carriedBedFacing = carryData.getBedFootState().getValue(BedBlock.FACING);
+                lockedBlockYaw = VRCarryBlockHandler.getBedYaw(carriedBedFacing) + 180.0F;
+            } else {
+                lockedBlockYaw = resolveRenderYaw(getRenderState(carryData), mc.player.getYRot());
             }
         }
 
         if (!isCarrying) {
-            carriedRenderYaw = 180.0F;
+            lockedBlockYaw = 180.0F;
             carriedBedFacing = Direction.SOUTH;
+            initialVrYaw = 0.0F;
         }
 
         wasCarryingLastTick = isCarrying;
@@ -341,15 +348,20 @@ public class VRCarryLogic {
         Vec3 cameraPos = mc.gameRenderer.getMainCamera().getPosition();
         MultiBufferSource.BufferSource bufferSource = mc.renderBuffers().bufferSource();
 
+        float currentVrYaw = (float) Math.toDegrees(renderPose.getRotationY());
+        float yawDelta = currentVrYaw - initialVrYaw;
+
+        float targetRenderYaw = lockedBlockYaw + yawDelta;
+
         poseStack.pushPose();
         poseStack.translate(renderPos.x - cameraPos.x, renderPos.y - cameraPos.y, renderPos.z - cameraPos.z);
         poseStack.scale(0.82F, 0.82F, 0.82F);
 
         if (carryData.isCarrying(VRCarryData.CarryType.BED)) {
-            poseStack.mulPose(Axis.YP.rotationDegrees(getBedRenderYaw()));
+            poseStack.mulPose(Axis.YP.rotationDegrees(targetRenderYaw));
             renderCarriedBed(mc, carryData, poseStack, bufferSource, renderPos);
         } else if (carryData.isCarrying(VRCarryData.CarryType.BLOCK)) {
-            poseStack.mulPose(Axis.YP.rotationDegrees(carriedRenderYaw - mc.player.getYRot()));
+            poseStack.mulPose(Axis.YP.rotationDegrees(targetRenderYaw));
             ItemStack renderStack = new ItemStack(carryData.getBlockState().getBlock());
             mc.getItemRenderer().renderStatic(
                 renderStack,
@@ -427,18 +439,26 @@ public class VRCarryLogic {
             }
 
             Vec3 targetPos;
+            float renderYaw;
+
             if (carrier == mc.player && localPose != null) {
                 Vec3 mainHandPos = getGrabPoint(localPose.getMainHand());
                 Vec3 offHandPos = getGrabPoint(localPose.getOffhand());
-                targetPos = getClientBedOccupantPos(mc, midpoint(mainHandPos, offHandPos));
+
+                float currentVrYaw = (float) Math.toDegrees(localPose.getRotationY());
+                float yawDelta = currentVrYaw - initialVrYaw;
+                renderYaw = lockedBlockYaw + yawDelta;
+
+                targetPos = getClientBedOccupantPos(mc, midpoint(mainHandPos, offHandPos), renderYaw);
             } else {
                 Vec3 offset = VRCarryBlockHandler.getBedPassengerOffset(carrier);
                 targetPos = new Vec3(carrier.getX() + offset.x, carrier.getY() + offset.y, carrier.getZ() + offset.z);
+                renderYaw = VRCarryBlockHandler.getBedYaw(carryData.getBedFootState().getValue(BedBlock.FACING)) + 180.0F;
             }
 
             occupant.setPos(targetPos.x, targetPos.y, targetPos.z);
-            float bedYaw = VRCarryBlockHandler.getBedYaw(carryData.getBedFootState().getValue(BedBlock.FACING));
-            float occupantYaw = bedYaw - 90.0F;
+
+            float occupantYaw = renderYaw - 270.0F;
             occupant.setYRot(occupantYaw);
             occupant.setYHeadRot(occupantYaw);
             occupant.setYBodyRot(occupantYaw);
@@ -455,8 +475,8 @@ public class VRCarryLogic {
         return null;
     }
 
-    private static Vec3 getClientBedOccupantPos(Minecraft mc, Vec3 handMidpoint) {
-        float angle = (float) Math.toRadians(getBedRenderYaw());
+    private static Vec3 getClientBedOccupantPos(Minecraft mc, Vec3 handMidpoint, float currentYaw) {
+        float angle = (float) Math.toRadians(currentYaw);
         double sin = Math.sin(angle);
         double cos = Math.cos(angle);
 
@@ -469,10 +489,6 @@ public class VRCarryLogic {
         double worldX = renderPos.x + localX * cos - localZ * sin + localToward * sin;
         double worldZ = renderPos.z + localX * sin + localZ * cos - localToward * cos;
         return new Vec3(worldX, renderPos.y + localY, worldZ);
-    }
-
-    private static float getBedRenderYaw() {
-        return VRCarryBlockHandler.getBedYaw(carriedBedFacing) + 180.0F;
     }
 
     public static float getBedPassengerScale() {
