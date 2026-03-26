@@ -42,7 +42,7 @@ import java.util.UUID;
 public class VRCarryLogic {
 
     public interface NetworkBridge {
-        void sendPickupBlock(BlockPos pos);
+        void sendPickupBlock(BlockPos pos, Direction pickupFace);
 
         void sendPlaceBlock(BlockPos pos, Direction direction);
     }
@@ -153,12 +153,22 @@ public class VRCarryLogic {
             return;
         }
 
+        BlockState targetState = mc.level.getBlockState(mainTarget);
+        Direction mainFace = resolveClosestFace(targetState, mc, mainTarget, mainHandPos);
+        Direction offFace = resolveClosestFace(targetState, mc, mainTarget, offHandPos);
+        Direction pickupFace = resolveClosestFace(targetState, mc, mainTarget, midpoint(mainHandPos, offHandPos));
+        Direction restrictedFace = VRCarryBlockHandler.getRestrictedPickupFace(targetState);
+        if (restrictedFace != null && (mainFace != restrictedFace || offFace != restrictedFace)) {
+            resetPickup();
+            return;
+        }
+
         Vec3 midpoint = midpoint(mainHandPos, offHandPos);
         pickupTicks++;
         pulseProgress(mc, midpoint, pickupTicks);
 
         if (pickupTicks >= PICKUP_HOLD_TICKS && bridge != null) {
-            bridge.sendPickupBlock(mainTarget);
+            bridge.sendPickupBlock(mainTarget, pickupFace);
             actionCooldown = 10;
             resetPickup();
             VisorAPI.client().getInputManager().triggerHapticPulse(HandType.MAIN, 320f, 1.0f, 0.18f);
@@ -293,6 +303,50 @@ public class VRCarryLogic {
         return shapeBox;
     }
 
+    private static Direction resolveClosestFace(BlockState state, Minecraft mc, BlockPos pos, Vec3 point) {
+        AABB worldBounds = getShapeBounds(state, mc, pos).move(pos);
+
+        Direction closestFace = Direction.NORTH;
+        double bestDistance = Double.MAX_VALUE;
+
+        double westDistance = Math.abs(point.x - worldBounds.minX);
+        if (westDistance < bestDistance) {
+            bestDistance = westDistance;
+            closestFace = Direction.WEST;
+        }
+
+        double eastDistance = Math.abs(point.x - worldBounds.maxX);
+        if (eastDistance < bestDistance) {
+            bestDistance = eastDistance;
+            closestFace = Direction.EAST;
+        }
+
+        double downDistance = Math.abs(point.y - worldBounds.minY);
+        if (downDistance < bestDistance) {
+            bestDistance = downDistance;
+            closestFace = Direction.DOWN;
+        }
+
+        double upDistance = Math.abs(point.y - worldBounds.maxY);
+        if (upDistance < bestDistance) {
+            bestDistance = upDistance;
+            closestFace = Direction.UP;
+        }
+
+        double northDistance = Math.abs(point.z - worldBounds.minZ);
+        if (northDistance < bestDistance) {
+            bestDistance = northDistance;
+            closestFace = Direction.NORTH;
+        }
+
+        double southDistance = Math.abs(point.z - worldBounds.maxZ);
+        if (southDistance < bestDistance) {
+            closestFace = Direction.SOUTH;
+        }
+
+        return closestFace;
+    }
+
     private static double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
     }
@@ -324,6 +378,20 @@ public class VRCarryLogic {
         return new ItemStack(carryData.getBlockState().getBlock());
     }
 
+    public static float getFirstPersonCarryYaw(LocalPlayer player) {
+        if (player == null) {
+            return 0.0F;
+        }
+
+        VRCarryData carryData = VRCarryDataManager.getCarryData(player);
+        if (!carryData.isCarrying(VRCarryData.CarryType.BLOCK)) {
+            return 0.0F;
+        }
+
+        BlockState state = carryData.getBlockState();
+        return VRCarryBlockHandler.getRestrictedPickupFace(state) != null ? resolveRenderYaw(state, player.getYRot()) : 0.0F;
+    }
+
     public static void renderCarriedBlockInWorld(PoseStack poseStack, float partialTicks) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) {
@@ -350,7 +418,6 @@ public class VRCarryLogic {
 
         float currentVrYaw = (float) Math.toDegrees(renderPose.getRotationY());
         float yawDelta = currentVrYaw - initialVrYaw;
-
         float targetRenderYaw = lockedBlockYaw + yawDelta;
 
         poseStack.pushPose();
@@ -390,30 +457,36 @@ public class VRCarryLogic {
     }
 
     private static BlockState getRenderState(VRCarryData carryData) {
-        if (carryData.isCarrying(VRCarryData.CarryType.BED)) {
-            return carryData.getBedFootState();
-        }
-        return carryData.getBlockState();
+        return carryData.isCarrying(VRCarryData.CarryType.BED) ? carryData.getBedFootState() : carryData.getBlockState();
     }
 
     private static float resolveRenderYaw(BlockState state, float playerYaw) {
+        Direction restrictedFace = VRCarryBlockHandler.getRestrictedPickupFace(state);
+        if (restrictedFace != null) {
+            return getYawForFacing(restrictedFace.getOpposite());
+        }
+
         for (var property : state.getProperties()) {
             if (property instanceof DirectionProperty directionProperty && "facing".equals(directionProperty.getName())) {
                 Direction direction = state.getValue(directionProperty);
                 if (direction.getAxis().isHorizontal()) {
-                    return switch (direction) {
-                        case NORTH -> 180.0F;
-                        case SOUTH -> 0.0F;
-                        case WEST -> 270.0F;
-                        case EAST -> 90.0F;
-                        default -> 180.0F;
-                    };
+                    return getYawForFacing(direction);
                 }
             }
         }
 
         float snapped = Math.round(playerYaw / 90.0F) * 90.0F;
         return snapped + 180.0F;
+    }
+
+    private static float getYawForFacing(Direction direction) {
+        return switch (direction) {
+            case NORTH -> 180.0F;
+            case SOUTH -> 0.0F;
+            case WEST -> 270.0F;
+            case EAST -> 90.0F;
+            default -> 180.0F;
+        };
     }
 
     private static void syncBedOccupantsClient(Minecraft mc, PlayerPoseClient localPose) {

@@ -34,6 +34,7 @@ public abstract class ItemInHandRendererMixin {
 
         poseStack.pushPose();
         poseStack.translate(0.0D, -0.35D, -0.90D);
+        poseStack.mulPose(Axis.YP.rotationDegrees(VRCarryLogic.getFirstPersonCarryYaw(player)));
         poseStack.mulPose(Axis.XP.rotationDegrees(12.0F));
         poseStack.scale(2.6F, 2.6F, 2.6F);
         renderItem(player, renderStack, ItemDisplayContext.FIXED, false, poseStack, bufferSource, light);

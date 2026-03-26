@@ -1,6 +1,7 @@
 package org.vmstudio.vrcarry.core.common;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
@@ -27,6 +28,10 @@ public class VRCarryData {
     }
 
     public void setBlock(BlockState state, @Nullable BlockEntity blockEntity) {
+        setBlock(state, blockEntity, null);
+    }
+
+    public void setBlock(BlockState state, @Nullable BlockEntity blockEntity, @Nullable Direction pickupFace) {
         this.type = CarryType.BLOCK;
 
         if (state.hasProperty(BlockStateProperties.WATERLOGGED)) {
@@ -39,6 +44,12 @@ public class VRCarryData {
             nbt.put("block_entity", blockEntity.saveWithId());
         } else {
             nbt.remove("block_entity");
+        }
+
+        if (pickupFace != null) {
+            nbt.putString("pickup_face", pickupFace.getName());
+        } else {
+            nbt.remove("pickup_face");
         }
     }
 
@@ -55,6 +66,14 @@ public class VRCarryData {
             return null;
         }
         return BlockEntity.loadStatic(pos, getBlockState(), nbt.getCompound("block_entity"));
+    }
+
+    @Nullable
+    public Direction getPickupFace() {
+        if (!isCarrying(CarryType.BLOCK) || !nbt.contains("pickup_face")) {
+            return null;
+        }
+        return Direction.byName(nbt.getString("pickup_face"));
     }
 
     public void setBed(BlockState footState, BlockState headState, @Nullable UUID occupantUuid) {

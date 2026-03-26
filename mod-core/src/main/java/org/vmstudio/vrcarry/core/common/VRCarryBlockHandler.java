@@ -17,8 +17,12 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.AbstractFurnaceBlock;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.EnderChestBlock;
+import net.minecraft.world.level.block.LecternBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
@@ -29,6 +33,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
+import org.jetbrains.annotations.Nullable;
 import org.vmstudio.vrcarry.core.common.VRCarryData.CarryType;
 
 import java.util.UUID;
@@ -64,6 +69,10 @@ public class VRCarryBlockHandler {
     }
 
     public static boolean tryPickupBlock(ServerPlayer player, BlockPos pos) {
+        return tryPickupBlock(player, pos, null);
+    }
+
+    public static boolean tryPickupBlock(ServerPlayer player, BlockPos pos, @Nullable Direction pickupFace) {
         if (!canCarryGeneral(player, Vec3.atCenterOf(pos))) {
             return false;
         }
@@ -76,6 +85,11 @@ public class VRCarryBlockHandler {
             return tryPickupBed(player, pos, state);
         }
 
+        Direction restrictedPickupFace = getRestrictedPickupFace(state);
+        if (restrictedPickupFace != null && pickupFace != restrictedPickupFace) {
+            return false;
+        }
+
         if (!isSupportedCarryBlock(level, pos)) {
             return false;
         }
@@ -85,7 +99,7 @@ public class VRCarryBlockHandler {
         }
 
         VRCarryData carryData = VRCarryDataManager.getCarryData(player);
-        carryData.setBlock(state, blockEntity);
+        carryData.setBlock(state, blockEntity, pickupFace);
 
         level.removeBlockEntity(pos);
         level.removeBlock(pos, false);
@@ -160,6 +174,32 @@ public class VRCarryBlockHandler {
 
     public static boolean canInteractWhileCarrying(ServerPlayer player) {
         return !VRCarryDataManager.getCarryData(player).isCarrying();
+    }
+
+    @Nullable
+    public static Direction getRestrictedPickupFace(BlockState state) {
+        Block block = state.getBlock();
+        if (!(block instanceof ChestBlock)
+            && !(block instanceof EnderChestBlock)
+            && !(block instanceof AbstractFurnaceBlock)
+            && !(block instanceof LecternBlock)) {
+            return null;
+        }
+
+        if (state.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
+            return state.getValue(BlockStateProperties.HORIZONTAL_FACING);
+        }
+
+        for (Property<?> property : state.getProperties()) {
+            if (property instanceof DirectionProperty directionProperty && "facing".equals(directionProperty.getName())) {
+                Direction direction = state.getValue(directionProperty);
+                if (direction.getAxis().isHorizontal()) {
+                    return direction;
+                }
+            }
+        }
+
+        return null;
     }
 
     private static boolean canCarryGeneral(ServerPlayer player, Vec3 pos) {

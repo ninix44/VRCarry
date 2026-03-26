@@ -46,8 +46,8 @@ public class ExampleMod {
         if (!ModLoader.get().isDedicatedServer()) {
             VRCarryLogic.bridge = new VRCarryLogic.NetworkBridge() {
                 @Override
-                public void sendPickupBlock(BlockPos pos) {
-                    CHANNEL.sendToServer(new PickupBlockPacket(pos));
+                public void sendPickupBlock(BlockPos pos, Direction pickupFace) {
+                    CHANNEL.sendToServer(new PickupBlockPacket(pos, pickupFace));
                 }
 
                 @Override
@@ -109,24 +109,27 @@ public class ExampleMod {
 
     public static class PickupBlockPacket {
         private final BlockPos pos;
+        private final Direction pickupFace;
 
-        public PickupBlockPacket(BlockPos pos) {
+        public PickupBlockPacket(BlockPos pos, Direction pickupFace) {
             this.pos = pos;
+            this.pickupFace = pickupFace;
         }
 
         public static void encode(PickupBlockPacket msg, FriendlyByteBuf buf) {
             buf.writeBlockPos(msg.pos);
+            buf.writeEnum(msg.pickupFace);
         }
 
         public static PickupBlockPacket decode(FriendlyByteBuf buf) {
-            return new PickupBlockPacket(buf.readBlockPos());
+            return new PickupBlockPacket(buf.readBlockPos(), buf.readEnum(Direction.class));
         }
 
         public static void handle(PickupBlockPacket msg, Supplier<NetworkEvent.Context> ctx) {
             ctx.get().enqueueWork(() -> {
                 var player = ctx.get().getSender();
                 if (player != null) {
-                    VRCarryBlockHandler.tryPickupBlock(player, msg.pos);
+                    VRCarryBlockHandler.tryPickupBlock(player, msg.pos, msg.pickupFace);
                 }
             });
             ctx.get().setPacketHandled(true);

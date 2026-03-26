@@ -27,7 +27,8 @@ public class ExampleMod implements ModInitializer {
     public void onInitialize() {
         ServerPlayNetworking.registerGlobalReceiver(VRCarryNetworking.PICKUP_BLOCK_PACKET, (server, player, handler, buf, responseSender) -> {
             var pos = buf.readBlockPos();
-            server.execute(() -> VRCarryBlockHandler.tryPickupBlock(player, pos));
+            var pickupFace = buf.readEnum(Direction.class);
+            server.execute(() -> VRCarryBlockHandler.tryPickupBlock(player, pos, pickupFace));
         });
 
         ServerPlayNetworking.registerGlobalReceiver(VRCarryNetworking.PLACE_BLOCK_PACKET, (server, player, handler, buf, responseSender) -> {
@@ -71,9 +72,10 @@ public class ExampleMod implements ModInitializer {
 
             VRCarryLogic.bridge = new VRCarryLogic.NetworkBridge() {
                 @Override
-                public void sendPickupBlock(BlockPos pos) {
+                public void sendPickupBlock(BlockPos pos, Direction pickupFace) {
                     FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
                     buf.writeBlockPos(pos);
+                    buf.writeEnum(pickupFace);
                     ClientPlayNetworking.send(VRCarryNetworking.PICKUP_BLOCK_PACKET, buf);
                 }
 
